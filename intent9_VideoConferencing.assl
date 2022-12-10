@@ -1,0 +1,592 @@
+
+AS AutonomicNetwork {
+ 	ASSELF_MANAGEMENT {
+		OTHER_POLICIES {
+			POLICY VideoConferencing {
+				FLUENT inProcessingVideoConference_A {
+					INITIATED_BY { EVENTS.VideoConference_AReceived } TERMINATED_BY { EVENTS.VideoConference_AProcessed }
+				}
+
+
+        FLUENT inProcessingVideoConference_B {
+					INITIATED_BY { EVENTS.VideoConference_BReceived } 	TERMINATED_BY { EVENTS.VideoConference_BProcessed }
+				}
+
+        MAPPING {
+          CONDITIONS { inProcessingVideoConference_A}
+          DO_ACTIONS { ACTIONS.processVideoConference("User_A") }
+        }
+				MAPPING {
+					CONDITIONS { inProcessingVideoConference_B}
+					DO_ACTIONS { ACTIONS.processVideoConference("User_B") }
+				}
+			}
+		}
+	} // ASSELF_MANAGEMENT
+
+	ASARCHITECTURE {
+		AELIST {AES.Controller, AES.User_A, AES.User_B}
+		DIRECT_DEPENDENCIES {
+			DEPENDENCY AES.User_A { AES.Controller }
+			DEPENDENCY AES.User_B { AES.Controller }
+		}
+		GROUPS {
+			GROUP VideoConferencingGroup {
+				MEMBERS { AES.Controller, AES.User_A, AES.User_B}
+			}
+		}
+	} // ASARCHITECTURE
+
+	ACTIONS {
+		ACTION IMPL processVideoConference {
+			PARAMETERS { string UserName	}
+			GUARDS { ASSELF_MANAGEMENT.OTHER_POLICIES.VideoConferencing.inProcessingVideoConference_A OR
+						 ASSELF_MANAGEMENT.OTHER_POLICIES.VideoConferencing.inProcessingVideoConference_B }
+			TRIGGERS {
+				IF UserName = "User_A" THEN EVENTS.VideoConference_AProcessed 	END
+				ELSE
+					IF UserName = "User_B" THEN EVENTS.VideoConference_BProcessed END
+				END
+			}
+		}
+	} // ACTIONS
+
+	EVENTS {
+		EVENT VideoConference_AReceived { ACTIVATION  { RECEIVED { ASIP.MESSAGES.msgVideoConferenceUser_A } } }
+		EVENT VideoConference_BReceived { ACTIVATION  { RECEIVED { ASIP.MESSAGES.msgVideoConferenceUser_B } } }
+
+		EVENT VideoConference_AProcessed { }
+		EVENT VideoConference_BProcessed { }
+	} // EVENTS
+} // AS AutonomicNetwork
+
+//==================== AS interaction protocol ============
+ASIP {
+	MESSAGES {
+		MESSAGE msgVideoConferenceUser_A { SENDER { AES.User_A } 	RECEIVER { ANY } PRIORITY { 1 } MSG_TYPE {	BIN } }
+		MESSAGE msgVideoConferenceUser_B { SENDER { AES.User_B } RECEIVER { ANY } PRIORITY { 1 } MSG_TYPE {	BIN } }
+	} // MESSAGES
+
+	CHANNELS {
+		CHANNEL VideoConferenceLink {
+			ACCEPTS { ASIP.MESSAGES.msgVideoConferenceUser_A, ASIP.MESSAGES.msgVideoConferenceUser_B }
+			ACCESS { SEQUENTIAL }
+			DIRECTION { INOUT } }
+	} // CHANNELS
+
+	FUNCTIONS {
+		FUNCTION sendVideoConferenceMsg {
+			PARAMETERS { string UserName }
+			DOES {
+				IF UserName = "User_A" THEN ASIP.MESSAGES.msgVideoConferenceUser_A >> ASIP.CHANNELS.VideoConferenceLink END
+				ELSE
+					IF UserName = "User_B" THEN ASIP.MESSAGES.msgVideoConferenceUser_B >> ASIP.CHANNELS.VideoConferenceLink END
+				END
+			}
+		}
+		FUNCTION receiveVideoConferenceMsg {
+			PARAMETERS { string UserName }
+
+			DOES {
+				IF UserName = "User_A" THEN ASIP.MESSAGES.msgVideoConferenceUser_A << ASIP.CHANNELS.VideoConferenceLink END
+				ELSE
+					IF UserName = "User_B" THEN ASIP.MESSAGES.msgVideoConferenceUser_B << ASIP.CHANNELS.VideoConferenceLink END
+				END
+			}
+		}
+	} // FUNCTIONS
+}//ASIP
+//==================== autonomic elements ====================
+AES {
+	//==================== AE Controller ====================
+	AE Controller {
+
+		VARS { boolean initiateWithA }
+
+		AESELF_MANAGEMENT {
+			OTHER_POLICIES {
+				POLICY VideoConferencing {
+					FLUENT inStartingingVideo {
+						INITIATED_BY { EVENTS.TimetoStartVideo }
+						TERMINATED_BY { EVENTS.VideoStarted }
+					}
+          FLUENT inProcessingVideo {
+            INITIATED_BY { EVENTS.VideoStarted }
+            TERMINATED_BY { EVENTS.VideoProcessed }
+          }
+
+          MAPPING {
+            CONDITIONS { inStartingingVideo }
+            DO_ACTIONS { ACTIONS.StartVideo }
+          }
+
+					MAPPING {
+						CONDITIONS { inProcessingVideo }
+						DO_ACTIONS { ACTIONS.ProcessVideo }
+					}
+				}
+			}
+		} // AESELF_MANAGEMENT
+
+		//====== AEs that can use the messages and channels specified by this AE ======
+		FRIENDS {
+			AELIST { AES.User_A, AES.User_B}
+		}
+
+		//==================== AE interaction protocol ====================
+		AEIP {
+			MESSAGES {
+				MESSAGE msgVideoConference {
+					SENDER { AES.Controller }
+					RECEIVER { AES.User_A, AES.User_B}
+					MSG_TYPE {	BIN }
+				}
+
+				// session messages to be received by User_A
+				MESSAGE msgScheduledMeetingBegin_A {
+					SENDER { AES.Controller }
+					RECEIVER { AES.User_A }
+					MSG_TYPE { NEGOTIATION }
+					BODY { BEGIN }
+				}
+				MESSAGE msgScheduledMeetingEnd_A {
+					SENDER { AES.Controller }
+					RECEIVER { AES.User_A }
+					MSG_TYPE {	 NEGOTIATION }
+					BODY { END }
+				}
+				MESSAGE msgInstantMeetingBegin_A {
+					SENDER { AES.Controller }
+					RECEIVER { AES.User_A }
+					MSG_TYPE { NEGOTIATION }
+					BODY { BEGIN }
+				}
+				MESSAGE msgInstantMeetingEnd_A {
+					SENDER { AES.Controller }
+					RECEIVER { AES.User_A }
+					MSG_TYPE { NEGOTIATION }
+					BODY { END }
+				}
+
+
+				// session messages to be received by User_B
+				MESSAGE msgScheduledMeetingBegin_B {
+					SENDER { AES.Controller }
+					RECEIVER { AES.User_B }
+					MSG_TYPE {	 NEGOTIATION }
+					BODY { BEGIN }
+				}
+				MESSAGE msgScheduledMeetingEnd_B {
+					SENDER { AES.Controller }
+					RECEIVER { AES.User_B }
+					MSG_TYPE { NEGOTIATION }
+					BODY { END }
+				}
+				MESSAGE msgInstantMeetingBegin_B {
+					SENDER { AES.Controller }
+					RECEIVER { AES.User_B }
+					MSG_TYPE { NEGOTIATION }
+					BODY { BEGIN }
+				}
+				MESSAGE msgInstantMeetingEnd_B {
+					SENDER { AES.Controller }
+					RECEIVER { AES.User_B }
+					MSG_TYPE { NEGOTIATION }
+					BODY { END }
+				}
+
+
+			} // MESSAGES
+
+			CHANNELS {
+				CHANNEL Controller_Link {
+					ACCEPTS { AEIP.MESSAGES.msgVideoConference,
+						AEIP.MESSAGES.msgScheduledMeetingBegin_A, AEIP.MESSAGES.msgScheduledMeetingEnd_A,
+						AEIP.MESSAGES.msgInstantMeetingBegin_A, AEIP.MESSAGES.msgInstantMeetingEnd_A,
+
+						AEIP.MESSAGES.msgScheduledMeetingBegin_A, AEIP.MESSAGES.msgScheduledMeetingEnd_A,
+						AEIP.MESSAGES.msgInstantMeetingBegin_B, AEIP.MESSAGES.msgInstantMeetingEnd_B
+					}
+					ACCESS { DIRECT }
+					DIRECTION { INOUT }
+				}
+			}
+
+			FUNCTIONS {
+				FUNCTION sendVideoConferenceMsg {
+					DOES { AEIP.MESSAGES.msgVideoConference >> AEIP.CHANNELS.Controller_Link	}
+				}
+				FUNCTION sendBeginMsgs {
+					PARAMETERS { string MeetingType }
+					DOES {
+						IF MeetingType = "ScheduledMeeting" THEN
+							AEIP.MESSAGES.msgScheduledMeetingBegin_A >> AEIP.CHANNELS.Controller_Link;
+							AEIP.MESSAGES.msgScheduledMeetingBegin_A >> AEIP.CHANNELS.Controller_Link
+						END
+						ELSE
+							IF MeetingType = "InstantMeeting" THEN
+								AEIP.MESSAGES.msgInstantMeetingBegin_A >> AEIP.CHANNELS.Controller_Link;
+								AEIP.MESSAGES.msgInstantMeetingBegin_B >> AEIP.CHANNELS.Controller_Link
+						END
+          END
+					}
+				}
+				FUNCTION sendEndSessionMsgs {
+					PARAMETERS { string MeetingType }
+					DOES {
+						IF MeetingType = "ScheduledMeeting" THEN
+							AEIP.MESSAGES.msgScheduledMeetingEnd_A >> AEIP.CHANNELS.Controller_Link;
+							AEIP.MESSAGES.msgScheduledMeetingEnd_A >> AEIP.CHANNELS.Controller_Link
+						END
+						ELSE
+							IF MeetingType = "InstantMeeting" THEN
+								AEIP.MESSAGES.msgInstantMeetingEnd_A >> AEIP.CHANNELS.Controller_Link;
+								AEIP.MESSAGES.msgInstantMeetingEnd_B >> AEIP.CHANNELS.Controller_Link
+							END
+						END
+					}
+				}
+			} // FUNCTIONS
+
+			MANAGED_ELEMENTS {
+				MANAGED_ELEMENT MeetingTool_A {
+					INTERFACE_FUNCTION StartVideo { }
+					INTERFACE_FUNCTION ScheduledMeetingInterface { }
+					INTERFACE_FUNCTION InstantMeetingInterface { }
+				}
+				MANAGED_ELEMENT MeetingTool_B {
+					INTERFACE_FUNCTION StartVideo { }
+					INTERFACE_FUNCTION ScheduledMeetingInterface { }
+					INTERFACE_FUNCTION InstantMeetingInterface { }
+				}
+			}
+		} // AEIP
+
+		ACTIONS {
+			ACTION StartVideo {
+				GUARDS { AESELF_MANAGEMENT.OTHER_POLICIES.VideoConferencing.inStartingingVideo }
+				DOES {
+					IF AES.Controller.initiateWithA THEN
+						call AEIP.MANAGED_ELEMENTS.MeetingTool_A.StartVideo;
+						AES.Controller.initiateWithA = false
+					END
+					ELSE
+						call AEIP.MANAGED_ELEMENTS.MeetingTool_B.StartVideo;
+						AES.Controller.initiateWithA = true
+					END
+				}
+				TRIGGERS { EVENTS.VideoStarted	}
+			}
+
+			ACTION processMeetingType {
+				PARAMETERS { string MeetingType }
+				DOES {
+					IF AES.Controller.initiateWithA THEN
+						IF MeetingType = "ScheduledMeeting" THEN
+							call AEIP.MANAGED_ELEMENTS.MeetingTool_A.ScheduledMeetingInterface
+						END;
+						IF MeetingType = "InstantMeeting" THEN
+							call AEIP.MANAGED_ELEMENTS.MeetingTool_A.InstantMeetingInterface
+					END
+          END
+					ELSE
+						IF MeetingType = "ScheduledMeeting" THEN
+							call AEIP.MANAGED_ELEMENTS.MeetingTool_B.ScheduledMeetingInterface
+						END;
+						IF MeetingType = "InstantMeeting" THEN
+							call AEIP.MANAGED_ELEMENTS.MeetingTool_B.InstantMeetingInterface
+						END
+					END;
+
+					call AEIP.FUNCTIONS.sendBeginMsgs (MeetingType);
+
+		
+						call AEIP.FUNCTIONS.sendVideoConferenceMsg;
+			
+
+					call AEIP.FUNCTIONS.sendEndSessionMsgs (MeetingType)
+				}
+			}
+			ACTION ProcessVideo {
+				GUARDS { AESELF_MANAGEMENT.OTHER_POLICIES.VideoConferencing.inProcessingVideo }
+				DOES {
+					call ACTIONS.processMeetingType("ScheduledMeeting");
+					call ACTIONS.processMeetingType("InstantMeeting")
+				}
+				TRIGGERS { EVENTS.VideoProcessed }
+			}
+		} // ACTIONS
+
+		EVENTS {
+			EVENT TimetoStartVideo {
+				ACTIVATION { PERIOD {	60 SEC } }
+			}
+			EVENT VideoStarted { }
+			EVENT VideoProcessed { }
+		} // EVENTS
+
+	} // AE Controller
+
+	//==================== AE User_A ====================
+	AE User_A {
+
+		AESELF_MANAGEMENT {
+			OTHER_POLICIES {
+				POLICY VideoConferencing {
+					FLUENT inStartingScheduledMeetingSession {
+						INITIATED_BY { EVENTS.ScheduledMeetingSessionIsStarting }
+						TERMINATED_BY { EVENTS.ScheduledMeetingSessionStarted }
+					}
+          FLUENT inStartingInstantMeetingSession {
+						INITIATED_BY { EVENTS.InstantMeetingSessionIsStarting }
+						TERMINATED_BY { EVENTS.InstantMeetingSessionStarted }
+					}
+          FLUENT InRecordingScheduledMeeting {
+            INITIATED_BY { EVENTS.ScheduledMeetingSessionStarted }
+            TERMINATED_BY { EVENTS.MeetingSessionEndedScheduledMeeting }
+          }
+          FLUENT InRecordingInstantMeeting {
+            INITIATED_BY { EVENTS.InstantMeetingSessionStarted }
+            TERMINATED_BY { EVENTS.MeetingSessionEndedInstantMeeting }
+          }
+          FLUENT inSendingVideo {
+            INITIATED_BY { EVENTS.MeetingSessionEndedInstantMeeting ,EVENTS.MeetingSessionEndedScheduledMeeting}
+            TERMINATED_BY { EVENTS.VideoUser_ASent}
+          }
+
+          MAPPING {
+						CONDITIONS { inStartingScheduledMeetingSession }
+						DO_ACTIONS { ACTIONS.startVideoRecordingSession ("ScheduledMeeting") }
+					}
+
+          MAPPING {
+						CONDITIONS { inStartingInstantMeetingSession }
+						DO_ACTIONS { ACTIONS.startVideoRecordingSession ("InstantMeeting") }
+					}
+
+          MAPPING {
+						CONDITIONS { InRecordingScheduledMeeting }
+						DO_ACTIONS { ACTIONS.RecordMeeting ("ScheduledMeeting") }
+					}
+          MAPPING {
+            CONDITIONS { InRecordingInstantMeeting }
+            DO_ACTIONS { ACTIONS.RecordMeeting ("InstantMeeting") }
+          }
+					MAPPING {
+						CONDITIONS { inSendingVideo }
+						DO_ACTIONS { ACTIONS.SendVideo }
+					}
+				}
+			}
+		} // AESELF_MANAGEMENT
+
+		//====== AEIP for this AE ======
+		AEIP {
+			FUNCTIONS {
+				FUNCTION receiveVideoConferenceMsg {
+					DOES { AES.Controller.AEIP.MESSAGES.msgVideoConference << AES.Controller.AEIP.CHANNELS.Controller_Link	}
+				}
+				FUNCTION receiveBeginMsg {
+					PARAMETERS {	string MeetingType }
+					DOES {
+						IF MeetingType = "ScheduledMeeting" THEN
+							AES.Controller.AEIP.MESSAGES.msgScheduledMeetingBegin_A << AES.Controller.AEIP.CHANNELS.Controller_Link
+						END
+						ELSE
+							IF MeetingType = "InstantMeeting" THEN
+								AES.Controller.AEIP.MESSAGES.msgInstantMeetingBegin_A << AES.Controller.AEIP.CHANNELS.Controller_Link
+							END
+						END
+					}
+				}
+				FUNCTION receiveEndMsg {
+					PARAMETERS {	string MeetingType }
+					DOES {
+						IF MeetingType = "ScheduledMeeting" THEN
+							AES.Controller.AEIP.MESSAGES.msgScheduledMeetingEnd_A << AES.Controller.AEIP.CHANNELS.Controller_Link
+						END
+						ELSE
+							IF MeetingType = "InstantMeeting" THEN
+								AES.Controller.AEIP.MESSAGES.msgInstantMeetingEnd_A << AES.Controller.AEIP.CHANNELS.Controller_Link
+							END
+						END
+					}
+				}
+			}
+			MANAGED_ELEMENTS { }
+		}
+
+		ACTIONS {
+			ACTION startVideoRecordingSession {
+				PARAMETERS {	string MeetingType }
+				GUARDS { AESELF_MANAGEMENT.OTHER_POLICIES.VideoConferencing.inStartingScheduledMeetingSession OR
+							 AESELF_MANAGEMENT.OTHER_POLICIES.VideoConferencing.inStartingInstantMeetingSession }
+				DOES {
+					CALL AEIP.FUNCTIONS.receiveBeginMsg (MeetingType)
+				}
+			}
+			ACTION RecordMeeting {
+				PARAMETERS {	string MeetingType }
+				GUARDS { AESELF_MANAGEMENT.OTHER_POLICIES.VideoConferencing.InRecordingScheduledMeeting OR
+							 AESELF_MANAGEMENT.OTHER_POLICIES.VideoConferencing.InRecordingInstantMeeting }
+				DOES {
+		
+						CALL AEIP.FUNCTIONS.receiveVideoConferenceMsg;
+
+					CALL AEIP.FUNCTIONS.receiveEndMsg (MeetingType)
+				}
+			}
+			ACTION IMPL VideoPrepration { }
+			ACTION SendVideo {
+				GUARDS { AESELF_MANAGEMENT.OTHER_POLICIES.VideoConferencing.inSendingVideo }
+				DOES {
+					CALL IMPL ACTIONS.VideoPrepration;
+					CALL ASIP.FUNCTIONS.sendVideoConferenceMsg("User_A");
+					CALL ASIP.FUNCTIONS.receiveVideoConferenceMsg("User_A")
+				}
+			}
+		} // ACTIONS
+
+		EVENTS {
+			EVENT ScheduledMeetingSessionIsStarting { ACTIVATION { SENT { AES.Controller.AEIP.MESSAGES.msgScheduledMeetingBegin_A } } }
+			EVENT InstantMeetingSessionIsStarting { ACTIVATION { SENT { AES.Controller.AEIP.MESSAGES.msgInstantMeetingBegin_A } } }
+			EVENT ScheduledMeetingSessionStarted { ACTIVATION { RECEIVED { AES.Controller.AEIP.MESSAGES.msgScheduledMeetingBegin_A } } }
+			EVENT MeetingSessionEndedScheduledMeeting { ACTIVATION { RECEIVED { AES.Controller.AEIP.MESSAGES.msgScheduledMeetingEnd_A } } }
+			EVENT InstantMeetingSessionStarted { ACTIVATION { RECEIVED { AES.Controller.AEIP.MESSAGES.msgInstantMeetingBegin_A } } }
+			EVENT MeetingSessionEndedInstantMeeting { ACTIVATION { RECEIVED { AES.Controller.AEIP.MESSAGES.msgInstantMeetingEnd_A } } }
+			EVENT VideoUser_ASent { ACTIVATION { SENT { ASIP.MESSAGES.msgVideoConferenceUser_A } } }
+		} // EVENTS
+
+	}
+
+	//==================== AE User_B ====================
+	AE User_B {
+
+		AESELF_MANAGEMENT {
+			OTHER_POLICIES {
+				POLICY VideoConferencing {
+					FLUENT inStartingScheduledMeetingSession {
+						INITIATED_BY { EVENTS.ScheduledMeetingSessionIsStarting }
+						TERMINATED_BY { EVENTS.ScheduledMeetingSessionStarted }
+					}
+					FLUENT inStartingInstantMeetingSession {
+						INITIATED_BY { EVENTS.InstantMeetingSessionIsStarting }
+						TERMINATED_BY { EVENTS.InstantMeetingSessionStarted }
+					}
+					FLUENT InRecordingScheduledMeeting {
+						INITIATED_BY { EVENTS.ScheduledMeetingSessionStarted }
+						TERMINATED_BY { EVENTS.MeetingSessionEndedScheduledMeeting }
+					}
+					FLUENT InRecordingInstantMeeting {
+						INITIATED_BY { EVENTS.InstantMeetingSessionStarted }
+						TERMINATED_BY { EVENTS.MeetingSessionEndedInstantMeeting }
+					}
+					FLUENT inSendingVideo {
+						INITIATED_BY { EVENTS.MeetingSessionEndedInstantMeeting, EVENTS.MeetingSessionEndedScheduledMeeting }
+						TERMINATED_BY { EVENTS.VideoUser_BSent }
+					}
+					MAPPING {
+						CONDITIONS { inStartingScheduledMeetingSession }
+						DO_ACTIONS { ACTIONS.startVideoRecordingSession ("ScheduledMeeting") }
+					}
+					MAPPING {
+						CONDITIONS { inStartingInstantMeetingSession }
+						DO_ACTIONS { ACTIONS.startVideoRecordingSession ("InstantMeeting") }
+					}
+
+					MAPPING {
+						CONDITIONS { InRecordingScheduledMeeting }
+						DO_ACTIONS { ACTIONS.RecordMeeting ("ScheduledMeeting") }
+					}
+					MAPPING {
+						CONDITIONS { InRecordingInstantMeeting }
+						DO_ACTIONS { ACTIONS.RecordMeeting ("InstantMeeting") }
+					}
+					MAPPING {
+						CONDITIONS { inSendingVideo }
+						DO_ACTIONS { ACTIONS.SendVideo }
+					}
+				}
+			}
+		} // AESELF_MANAGEMENT
+
+		//====== AEIP for this AE ======
+		AEIP {
+			FUNCTIONS {
+				FUNCTION receiveVideoConferenceMsg {
+					DOES { AES.Controller.AEIP.MESSAGES.msgVideoConference << AES.Controller.AEIP.CHANNELS.Controller_Link	}
+				}
+				FUNCTION receiveBeginMsg {
+					PARAMETERS {	string MeetingType }
+					DOES {
+						IF MeetingType = "ScheduledMeeting" THEN
+							AES.Controller.AEIP.MESSAGES.msgScheduledMeetingBegin_A << AES.Controller.AEIP.CHANNELS.Controller_Link
+						END
+						ELSE
+							IF MeetingType = "InstantMeeting" THEN
+								AES.Controller.AEIP.MESSAGES.msgInstantMeetingBegin_B << AES.Controller.AEIP.CHANNELS.Controller_Link
+							END
+						END
+					}
+				}
+				FUNCTION receiveEndMsg {
+					PARAMETERS {	string MeetingType }
+					DOES {
+						IF MeetingType = "ScheduledMeeting" THEN
+							AES.Controller.AEIP.MESSAGES.msgScheduledMeetingEnd_A << AES.Controller.AEIP.CHANNELS.Controller_Link
+						END
+						ELSE
+							IF MeetingType = "InstantMeeting" THEN
+								AES.Controller.AEIP.MESSAGES.msgInstantMeetingEnd_B << AES.Controller.AEIP.CHANNELS.Controller_Link
+							END
+						END
+					}
+				}
+			}
+			MANAGED_ELEMENTS { }
+		}
+
+		ACTIONS {
+			ACTION startVideoRecordingSession {
+				PARAMETERS {	string MeetingType }
+				GUARDS { AESELF_MANAGEMENT.OTHER_POLICIES.VideoConferencing.inStartingScheduledMeetingSession OR
+							 AESELF_MANAGEMENT.OTHER_POLICIES.VideoConferencing.inStartingInstantMeetingSession  }
+				DOES {
+					CALL AEIP.FUNCTIONS.receiveBeginMsg (MeetingType)
+				}
+			}
+			ACTION RecordMeeting {
+				PARAMETERS {	string MeetingType }
+				GUARDS { AESELF_MANAGEMENT.OTHER_POLICIES.VideoConferencing.InRecordingScheduledMeeting OR
+							 AESELF_MANAGEMENT.OTHER_POLICIES.VideoConferencing.InRecordingInstantMeeting }
+
+				DOES {
+			
+						CALL AEIP.FUNCTIONS.receiveVideoConferenceMsg;
+				
+
+					CALL AEIP.FUNCTIONS.receiveEndMsg (MeetingType)
+				}
+			}
+			ACTION IMPL VideoPrepration { }
+			ACTION SendVideo {
+				GUARDS { AESELF_MANAGEMENT.OTHER_POLICIES.VideoConferencing.inSendingVideo }
+				DOES {
+					CALL IMPL ACTIONS.VideoPrepration;
+					CALL ASIP.FUNCTIONS.sendVideoConferenceMsg("User_B");
+					CALL ASIP.FUNCTIONS.receiveVideoConferenceMsg("User_B")
+				}
+			}
+		} // ACTIONS
+
+		EVENTS {
+			EVENT ScheduledMeetingSessionIsStarting { ACTIVATION { SENT { AES.Controller.AEIP.MESSAGES.msgScheduledMeetingBegin_A } } }
+			EVENT InstantMeetingSessionIsStarting { ACTIVATION { SENT { AES.Controller.AEIP.MESSAGES.msgInstantMeetingBegin_B } } }
+			EVENT ScheduledMeetingSessionStarted { ACTIVATION { RECEIVED { AES.Controller.AEIP.MESSAGES.msgScheduledMeetingBegin_A } } }
+			EVENT MeetingSessionEndedScheduledMeeting { ACTIVATION { RECEIVED { AES.Controller.AEIP.MESSAGES.msgScheduledMeetingEnd_A } } }
+			EVENT InstantMeetingSessionStarted { ACTIVATION { RECEIVED { AES.Controller.AEIP.MESSAGES.msgInstantMeetingBegin_B } } }
+			EVENT MeetingSessionEndedInstantMeeting { ACTIVATION { RECEIVED { AES.Controller.AEIP.MESSAGES.msgInstantMeetingEnd_B } } }
+			EVENT VideoUser_BSent { ACTIVATION { SENT {	ASIP.MESSAGES.msgVideoConferenceUser_B } } }
+		} // EVENTS
+	}//ae
+}//AES
