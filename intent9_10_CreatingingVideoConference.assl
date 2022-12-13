@@ -359,6 +359,7 @@ AES {
       ACTION CreateVideoConference{
         GUARDS { AESELF_MANAGEMENT.SELF_CONFIGURING.inVideoConferenceCreation}
         DOES{
+          CALL AEIP.FUNCTIONS.sendmsgWeeklyMeeting;
           CALL IMPL ACTIONS.CreateRecurringMeeting 
         }
       }
